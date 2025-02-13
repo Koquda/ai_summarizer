@@ -1,0 +1,21 @@
+[project]
+name = "ai-summarizer"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "alejandro.campa",email = "uo282874@uniovi.es"}
+]
+readme = "README.md"
+requires-python = ">=3.10 <3.13"
+dependencies = [
+    "langchain-core (>=0.3.34,<0.4.0)",
+    "langgraph (>0.2.27)",
+    "langchain-ollama (>=0.2.3,<0.3.0)",
+    "langchain (>=0.3.18,<0.4.0)",
+    "langchain-community (>=0.3.17,<0.4.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
