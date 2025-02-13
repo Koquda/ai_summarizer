@@ -1,11 +1,10 @@
-import json
+import streamlit as st
 import os
+import json
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
-from langchain_community.document_loaders import TextLoader, PyPDFLoader, UnstructuredMarkdownLoader 
-
-print("Current working directory:", os.getcwd())
+from langchain_community.document_loaders import TextLoader, PyPDFLoader, UnstructuredMarkdownLoader
 
 # Initialize the LLM
 llm = ChatOllama(
@@ -13,47 +12,50 @@ llm = ChatOllama(
     temperature=0.5,
 )
 
-# Configure file loading
-file_path = 'recipe.md'  # Change this to your input file
-file_ext = os.path.splitext(file_path)[1].lower()
+st.title("Document Chatbot")
 
-print(f"Loading {file_ext} document...")
+# File uploader widget for txt, md, or pdf files
+uploaded_file = st.file_uploader("Upload a file", type=["txt", "md", "pdf"])
 
-# Select the appropriate loader based on file extension
-if file_ext == '.txt':
-    loader = TextLoader(file_path, encoding='utf-8')
-elif file_ext == '.md':
-    loader = UnstructuredMarkdownLoader(file_path)
-elif file_ext == '.pdf':
-    loader = PyPDFLoader(file_path)
-else:
-    raise ValueError(f"Unsupported file type: {file_ext}")
-
-# Load and combine content from the document
-documents = loader.load()
-combined_content = "\n\n".join([doc.page_content for doc in documents])
-
-# Load configuration from config.json
-with open("config.json") as f:
-    config = json.load(f)
-
-# Define a chat prompt template that includes the document context.
-# The prompt instructs the model to answer the user's question based on the document.
-prompt = ChatPromptTemplate.from_messages([
-    ("system", config["system_prompt"]),
-    ("user", "Utiliza el siguiente documento como contexto para responder la pregunta del usuario:\n\n{document}\n\nPregunta: {user_query}\nRespuesta:")
-])
-
-print("Chatbot is ready! Type 'exit' to quit.")
-
-# Chat loop: repeatedly get user input and generate a response
-while True:
-    user_query = input("You: ")
-    if user_query.lower() in ["exit", "quit"]:
-        print("Exiting chatbot.")
-        break
-
-    # Fill in the prompt with the document and the user’s query, then call the LLM
-    chain = prompt.partial(document=combined_content, user_query=user_query) | llm
-    response = chain.invoke({})
-    print("Bot:", response.content)
+if uploaded_file is not None:
+    file_ext = os.path.splitext(uploaded_file.name)[1].lower()
+    
+    # Process file based on its extension
+    if file_ext == '.txt':
+        content = uploaded_file.read().decode("utf-8")
+        documents = [Document(page_content=content)]
+    elif file_ext == '.md':
+        content = uploaded_file.read().decode("utf-8")
+        documents = [Document(page_content=content)]
+    elif file_ext == '.pdf':
+        # PyPDFLoader expects a path, so you may need to save the file temporarily
+        temp_path = f"temp{file_ext}"
+        with open(temp_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        loader = PyPDFLoader(temp_path)
+        documents = loader.load()
+        os.remove(temp_path)
+    else:
+        st.error("Unsupported file type")
+    
+    # Combine content from all loaded documents
+    combined_content = "\n\n".join([doc.page_content for doc in documents])
+    
+    # Load configuration for the system prompt
+    with open("config.json") as f:
+        config = json.load(f)
+    
+    # Define the chat prompt template that includes the document context.
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", config["system_prompt"]),
+        ("user", "Utiliza el siguiente documento como contexto para responder la pregunta del usuario:\n\n{document}\n\nPregunta: {user_query}\nRespuesta:")
+    ])
+    
+    # Text input for the user to ask a question
+    user_query = st.text_input("Enter your question:")
+    
+    if st.button("Send") and user_query:
+        # Fill in the prompt with both the document and the user query
+        chain = prompt.partial(document=combined_content, user_query=user_query) | llm
+        response = chain.invoke({})
+        st.write(response.content)
