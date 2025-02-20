@@ -2,111 +2,127 @@ import re
 import streamlit as st
 import os
 import json
-from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_ollama import ChatOllama
-from langchain_community.document_loaders import TextLoader, PyPDFLoader, UnstructuredMarkdownLoader
+import logging
+from typing import Optional
+from ai_summarizer.retrieval_chain import create_chain, create_vector_store
+from ai_summarizer.response_generator import generate_response
 
-# Initialize the LLM
-llm = ChatOllama(
-    model="deepseek-r1",
-    temperature=0.5,
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('chatbot.log'),
+        logging.StreamHandler()
+    ]
 )
-print("Model loaded")
+logger = logging.getLogger(__name__)
 
-st.title("Document Chatbot")
-
-# Initialize session state for messages if not already done
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# File uploader widget for txt, md, or pdf files
-uploaded_file = st.file_uploader("Upload a file", type=["txt", "md", "pdf"])
-
-# Process the uploaded file only if it is new
-if uploaded_file is not None:
-    # Check if we have already processed this file
-    if "uploaded_file_name" not in st.session_state or st.session_state.uploaded_file_name != uploaded_file.name:
-        st.session_state.uploaded_file_name = uploaded_file.name
-        file_ext = os.path.splitext(uploaded_file.name)[1].lower()
-        
-        # Process file based on its extension
-        if file_ext == '.txt':
-            content = uploaded_file.read().decode("utf-8")
-            documents = [Document(page_content=content)]
-        elif file_ext == '.md':
-            content = uploaded_file.read().decode("utf-8")
-            documents = [Document(page_content=content)]
-        elif file_ext == '.pdf':
-            # Save temporary file for PDF processing
-            temp_path = f"temp{file_ext}"
-            with open(temp_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            loader = PyPDFLoader(temp_path)
-            documents = loader.load()
-            os.remove(temp_path)
-        else:
-            st.error("Unsupported file type")
-        
-        # Combine content from all loaded documents and store in session state
-        combined_content = "\n\n".join([doc.page_content for doc in documents])
-        st.session_state.combined_content = combined_content
-else:
-    # If no file is uploaded, check if we have a stored document
-    if "combined_content" not in st.session_state:
-        st.warning("Please upload a file to get started.")
+def initialize_session_state():
+    """Inicializa las variables del estado de la sesión"""
+    try:
+        if "vector_store" not in st.session_state:
+            st.session_state.vector_store = create_vector_store(None)
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
+        if "is_generating" not in st.session_state:
+            st.session_state.is_generating = False
+    except Exception as e:
+        logger.error(f"Error initializing session state: {str(e)}")
+        st.error("Error initializing application. Please try refreshing the page.")
         st.stop()
 
-# Load configuration for the system prompt
-with open("config.json") as f:
-    config = json.load(f)
-
-# Define the chat prompt template
-prompt_template = ChatPromptTemplate.from_messages([
-    ("system", config["system_prompt"]),
-    ("user", "Utiliza el siguiente documento como contexto para responder la pregunta del usuario:\n\n{document}\n\nPregunta: {user_query}\nRespuesta:")
-])
-
-# Get user input and handle Enter key
-if user_input := st.chat_input("Enter your question:"):
-    # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "response": user_input})
-    with st.chat_message("user"):
-        st.markdown(user_input)
+def ask_question(query: str) -> None:
+    """
+    Procesa una pregunta utilizando el vector store y genera una respuesta
     
-    with st.spinner("Pensando..."):
-        # Generate response using stored combined_content
-        chain = prompt_template.partial(
-            document=st.session_state.combined_content, 
-            user_query=user_input
-        ) | llm
-
-        print("Invoking chain")
-
-        response = chain.invoke({})
-
-        print("Chain invoked")
-
-        think_match = re.search(r'<think>(.*?)</think>', response.content, re.DOTALL)
-        think_content = think_match.group(1).strip() if think_match else ""
+    Args:
+        query: La pregunta del usuario
+    """
+    try:
+        vector_store = st.session_state.vector_store
+        logger.info(f"Processing question: {query}")
         
-        # Remove the <think> tag and its content from the text
-        response_text = re.sub(r'<think>.*?</think>', '', response.content, flags=re.DOTALL).strip()
+        chain = create_chain()
+        logger.info("Chain created successfully")
         
-        # Add assistant response to chat history
-        st.session_state.messages.append({
-            "role": "assistant", 
-            "response": response_text, 
-            "think": think_content
-        })
+        generate_response(chain, query, vector_store)
+        logger.info("Response generated successfully")
+    except Exception as e:
+        logger.error(f"Error processing question: {str(e)}")
+        st.error("Lo siento, ha ocurrido un error al procesar tu pregunta. Por favor, inténtalo de nuevo.")
 
-# Display the entire chat history
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        if message["role"] == "assistant":
-            with st.expander("Razonamiento del modelo"):
-                st.markdown(message["think"])
-        st.markdown(message["response"])
-        if message["role"] == "assistant":
-            with st.expander("Documento utilizado"):
-                st.markdown(st.session_state.combined_content)
+def main():
+    try:
+        st.title("Document Chatbot")
+        initialize_session_state()
+
+        chat_container = st.container()
+        summary_container = st.container()
+
+        # File uploader widget
+        uploaded_file = st.file_uploader("Upload a file", type=["txt", "md", "pdf"])
+
+        if uploaded_file is not None:
+            logger.info(f"Processing file: {uploaded_file.name}")
+            try:
+                st.session_state.vector_store = create_vector_store(uploaded_file)
+            except Exception as e:
+                logger.error(f"Error processing file: {str(e)}")
+                st.error("Error processing the uploaded file. Please check the file format and try again.")
+                st.stop()
+        else:
+            if "combined_content" not in st.session_state:
+                st.warning("Please upload a file to get started.")
+                st.stop()
+
+        with chat_container:
+            if user_input := st.chat_input("Enter your question:", disabled=st.session_state.is_generating):
+                logger.info(f"New user input received: {user_input}")
+                st.session_state.is_generating = True
+                st.session_state.current_input = user_input
+                with st.spinner("Pensando..."):
+                    try:
+                        ask_question(st.session_state.current_input)
+                    except Exception as e:
+                        logger.error(f"Error in chat interaction: {str(e)}")
+                    finally:
+                        st.session_state.is_generating = False
+                        if "current_input" in st.session_state:
+                            del st.session_state.current_input
+                        st.rerun()
+
+        with summary_container:
+            if st.button("Summarize document", disabled=st.session_state.is_generating):
+                logger.info("Summary requested")
+                st.session_state.is_generating = True
+                st.session_state.summarize_requested = True
+                st.session_state.messages = []
+                with st.spinner("Summarizing..."):
+                    try:
+                        ask_question("Realiza un resumen del documento")
+                    except Exception as e:
+                        logger.error(f"Error generating summary: {str(e)}")
+                        st.error("Error generating document summary")
+                    finally:
+                        st.session_state.is_generating = False
+                        st.session_state.summarize_requested = False
+                        st.rerun()
+
+        # Display chat history
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                if message["role"] == "assistant":
+                    with st.expander("Razonamiento del modelo"):
+                        st.markdown(message["think"])
+                st.markdown(message["response"])
+
+                if message["role"] == "user":
+                    st.markdown(message["content"])
+
+    except Exception as e:
+        logger.error(f"Unexpected error in main application: {str(e)}")
+        st.error("An unexpected error occurred. Please refresh the page and try again.")
+
+if __name__ == "__main__":
+    main()
