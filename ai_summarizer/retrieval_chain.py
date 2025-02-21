@@ -44,10 +44,15 @@ def create_param_chain(model):
     """Create parameter chain with the given model."""
     try:
         logger.info("Creating parameter chain")
-        prompt = ChatPromptTemplate.from_template(Config.Prompt.SYSTEM_PROMPT)
-        chain = prompt | model
-        logger.debug("Parameter chain created successfully")
-        return chain
+        
+        dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(dir, "config.json")
+        with open(config_path) as f:
+            config = json.load(f)
+            prompt = ChatPromptTemplate.from_template(config["system_prompt"] + Config.Prompt.SYSTEM_PROMPT)
+            chain = prompt | model
+            logger.debug("Parameter chain created successfully")
+            return chain
 
     except Exception as e:
         logger.error(f"Error in create_param_chain: {str(e)}")

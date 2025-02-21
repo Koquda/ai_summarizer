@@ -3,20 +3,25 @@ import streamlit as st
 import os
 import json
 import logging
-from typing import Optional
 from ai_summarizer.retrieval_chain import create_chain, create_vector_store
 from ai_summarizer.response_generator import generate_response
+from ai_summarizer.custom_formatter import CustomFormatter
 
 # Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('chatbot.log'),
-        logging.StreamHandler()
-    ]
-)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Avoid adding multiple handlers
+if not logger.handlers:
+    # Crear y configurar el handler con el CustomFormatter
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(CustomFormatter())
+    logger.addHandler(console_handler)
+
+    # También podemos añadir un FileHandler para guardar los logs en un archivo
+    file_handler = logging.FileHandler('chatbot.log')
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    logger.addHandler(file_handler)
 
 def initialize_session_state():
     """Inicializa las variables del estado de la sesión"""
@@ -83,6 +88,10 @@ def main():
                 st.session_state.current_input = user_input
                 with st.spinner("Pensando..."):
                     try:
+                        st.session_state.messages.append({
+                            "role": "user",
+                            "content": user_input
+                        })
                         ask_question(st.session_state.current_input)
                     except Exception as e:
                         logger.error(f"Error in chat interaction: {str(e)}")
@@ -100,7 +109,12 @@ def main():
                 st.session_state.messages = []
                 with st.spinner("Summarizing..."):
                     try:
-                        ask_question("Realiza un resumen del documento")
+                        question = "Realiza un resumen del documento"
+                        st.session_state.messages.append({
+                            "role": "user",
+                            "content": question
+                        })
+                        ask_question(question)
                     except Exception as e:
                         logger.error(f"Error generating summary: {str(e)}")
                         st.error("Error generating document summary")
@@ -115,10 +129,12 @@ def main():
                 if message["role"] == "assistant":
                     with st.expander("Razonamiento del modelo"):
                         st.markdown(message["think"])
-                st.markdown(message["response"])
-
+                    st.markdown(message["response"])
+                
                 if message["role"] == "user":
                     st.markdown(message["content"])
+                logger.info(f"Message displayed: {message}")
+
 
     except Exception as e:
         logger.error(f"Unexpected error in main application: {str(e)}")

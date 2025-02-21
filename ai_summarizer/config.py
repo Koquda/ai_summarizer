@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from langchain_core.prompts import ChatPromptTemplate
 
 class Config:
     ALLOWED_FILE_EXTENSIONS = set(['.pdf', '.md', '.txt'])
@@ -22,5 +21,4 @@ class Config:
         APP_HOME = Path(os.getenv("APP_HOME", Path(__file__).parent.parent))
     
     class Prompt:
-        TEMPLATE = ChatPromptTemplate.from_messages([("system", "{system_prompt}"),("user", "Utiliza el siguiente documento como contexto para responder la pregunta del usuario:\n\n{document}\n\nPregunta: {question}\n\nContexto de la conversación:{context}\n\nRespuesta:")])
-        SYSTEM_PROMPT = "Eres una IA que ayuda a los usuarios a responder preguntas sobre documentos. Utiliza el siguiente documento como contexto para responder la pregunta del usuario:\n\n{document}\n\nPregunta: {question}\n\nContexto de la conversación:{context}\n\nRespuesta:"
+        SYSTEM_PROMPT = "No debes inventar ni añadir información, solo proporcionar las respuestas respecto a la información que está presente en el documento:\n\n{document}\n\nPregunta: {question}\n\nContexto de la conversación:{context}\n\nRespuesta:"
