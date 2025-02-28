@@ -26,13 +26,15 @@ def process_llm_response(response):
         logger.error(f"Error processing LLM response: {e}")
         raise
 
-def generate_response(chain, query, vector_store):
+def generate_response(chain, query):
     """Generate response using the LLM chain."""
     try:
         # Verify query is not None or empty
         if not query:
             logger.error("Empty query received")
             raise ValueError("Query cannot be empty")
+
+        vector_store = st.session_state.vector_store
 
         # Load configuration for the system prompt
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -55,12 +57,17 @@ def generate_response(chain, query, vector_store):
         # Retrieve relevant document chunks using similarity search
         logger.info(f"Performing similarity search for query: {query[:50]}...")
         search_results = vector_store.similarity_search(query, k=Config.Chatbot.N_CONTEXT_RESULTS)
-        document_content = "\n".join([doc.page_content for doc in search_results])
-
-        if not document_content:
+        logger.info(f"Found {len(search_results)} relevant documents")
+        for doc in search_results:
+            logger.debug(f"Document: {doc.page_title}")
+        
+        if not search_results:
             logger.warning("No relevant documents found in vector store")
             raise ValueError("No document content retrieved from vector store")
-
+        
+        document_chunks = [doc.page_content for doc in search_results]
+        document_content = "\n".join(document_chunks)
+        
         # Get conversation history from session state 
         conversation_context = ""
         if "messages" in st.session_state:
@@ -86,7 +93,8 @@ def generate_response(chain, query, vector_store):
         st.session_state.messages.append({
             "role": "assistant", 
             "response": response_text,
-            "think": think_content
+            "think": think_content,
+            "sources": document_chunks
         })
         
         logger.info("Response processed and saved to session state")

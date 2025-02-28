@@ -5,13 +5,13 @@ class Config:
     ALLOWED_FILE_EXTENSIONS = set(['.pdf', '.md', '.txt'])
 
     class Model:
-        NAME = "deepseek-r1"
-        TEMPERATURE = 0.6
+        NAME = "deepseek-r1:14b"
+        TEMPERATURE = 0.0
 
     class Preprocessing:
         CHUNK_SIZE = 2048
         CHUNK_OVERLAP = 128
-        EMBEDDING_MODEL = "deepseek-r1"
+        EMBEDDING_MODEL = "deepseek-r1:14b"
         CONTEXTUALIZE_CHUNKS = True
 
     class Chatbot:

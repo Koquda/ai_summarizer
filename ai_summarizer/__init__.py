@@ -3,7 +3,7 @@ import streamlit as st
 import os
 import json
 import logging
-from ai_summarizer.retrieval_chain import create_chain, create_vector_store
+from ai_summarizer.retrieval_chain import create_chain, create_vector_store, process_uploaded_file
 from ai_summarizer.response_generator import generate_response
 from ai_summarizer.custom_formatter import CustomFormatter
 
@@ -32,6 +32,12 @@ def initialize_session_state():
             st.session_state.messages = []
         if "is_generating" not in st.session_state:
             st.session_state.is_generating = False
+        if "documents" not in st.session_state:
+            st.session_state.documents = []
+        if "chain" not in st.session_state:
+            st.session_state.chain = create_chain()
+        if "document_processed" not in st.session_state:
+            st.session_state.document_processed = False
     except Exception as e:
         logger.error(f"Error initializing session state: {str(e)}")
         st.error("Error initializing application. Please try refreshing the page.")
@@ -45,13 +51,12 @@ def ask_question(query: str) -> None:
         query: La pregunta del usuario
     """
     try:
-        vector_store = st.session_state.vector_store
         logger.info(f"Processing question: {query}")
         
-        chain = create_chain()
-        logger.info("Chain created successfully")
+        chain = st.session_state.chain
+        logger.info("Using existing chain")
         
-        generate_response(chain, query, vector_store)
+        generate_response(chain, query)
         logger.info("Response generated successfully")
     except Exception as e:
         logger.error(f"Error processing question: {str(e)}")
@@ -68,16 +73,18 @@ def main():
         # File uploader widget
         uploaded_file = st.file_uploader("Upload a file", type=["txt", "md", "pdf"])
 
-        if uploaded_file is not None:
+        if uploaded_file is not None and not st.session_state.document_processed:
             logger.info(f"Processing file: {uploaded_file.name}")
             try:
-                st.session_state.vector_store = create_vector_store(uploaded_file)
+                st.session_state.documents = process_uploaded_file(uploaded_file)
+                st.session_state.vector_store = create_vector_store(st.session_state.documents)
+                st.session_state.document_processed = True
             except Exception as e:
                 logger.error(f"Error processing file: {str(e)}")
                 st.error("Error processing the uploaded file. Please check the file format and try again.")
                 st.stop()
         else:
-            if "combined_content" not in st.session_state:
+            if not st.session_state.documents:
                 st.warning("Please upload a file to get started.")
                 st.stop()
 
@@ -130,7 +137,12 @@ def main():
                     with st.expander("Razonamiento del modelo"):
                         st.markdown(message["think"])
                     st.markdown(message["response"])
-                
+                    if "sources" in message:
+                        st.markdown("Fuentes:")
+                        with st.expander("Ver fuentes"):
+                            for source in message["sources"]:
+                                st.markdown(f"- {source}")
+               
                 if message["role"] == "user":
                     st.markdown(message["content"])
                 logger.info(f"Message displayed: {message}")

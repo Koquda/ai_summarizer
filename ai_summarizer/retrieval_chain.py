@@ -14,20 +14,12 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 # Configurar logging
 logger = logging.getLogger(__name__)
 
-def create_vector_store(doc):
-    """Create vector store from document."""
+def create_vector_store(documents):
+    """Create vector store from processed documents."""
     try:
         embedding = OllamaEmbeddings(model=Config.Preprocessing.EMBEDDING_MODEL)
         logger.info("Created embedding model")
 
-        if doc is None:
-            logger.debug("No document provided, creating empty vector store")
-            vector_store = InMemoryVectorStore(embedding)
-            return vector_store
-
-        logger.info(f"Processing uploaded file: {doc.name if doc else 'None'}")
-        documents = process_uploaded_file(doc)
-        
         if not documents:
             logger.warning("No documents were processed")
             return InMemoryVectorStore(embedding)

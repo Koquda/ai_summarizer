@@ -5,10 +5,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+dir = os.path.dirname(os.path.abspath(__file__))
+config_path = os.path.join(os.path.dirname(dir), "config.json")
+
 def reset_to_default_prompt():
     try:
-        dir = os.path.dirname(os.path.abspath(__file__))
-        config_path = os.path.join(dir, "config.json")
         logger.info("Resetting prompt to default value")
         
         with open(config_path, 'r', encoding='utf-8') as f:
@@ -16,7 +17,7 @@ def reset_to_default_prompt():
             default_prompt = config.get('default_system_prompt', '')
             config['system_prompt'] = default_prompt
             
-        with open('config.json', 'w', encoding='utf-8') as f:
+        with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=4, ensure_ascii=False)
             
         logger.info("Successfully reset prompt to default")
@@ -34,7 +35,7 @@ def reset_to_default_prompt():
 def load_system_prompt():
     try:
         logger.info("Loading system prompt")
-        with open('config.json', 'r', encoding='utf-8') as f:
+        with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
             prompt = config.get('system_prompt', '')
             logger.info("System prompt loaded successfully")
@@ -53,13 +54,13 @@ def save_system_prompt(prompt):
     try:
         logger.info("Saving system prompt")
         config = {}
-        if os.path.exists('config.json'):
-            with open('config.json', 'r', encoding='utf-8') as f:
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
         
         config['system_prompt'] = prompt
         
-        with open('config.json', 'w', encoding='utf-8') as f:
+        with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=4, ensure_ascii=False)
         
         logger.info("System prompt saved successfully")
@@ -94,7 +95,7 @@ def prompt_page():
         
         new_prompt = st.text_area(
             "Edit System Prompt",
-            value=st.session_state.prompt_textarea,
+            value=st.session_state.get("prompt_textarea", ""),
             height=300,
             key="prompt_textarea"
         )
